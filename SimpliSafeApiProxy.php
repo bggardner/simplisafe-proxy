@@ -40,10 +40,11 @@ class SimpliSafeApiProxy
     /**
      * @param string $username SimpliSafe account username
      * @param string $password SimpliSafe account password
+     * @param string $deviceId Name that will be displayed in the 'Recenlty Used Mobile Devices' log
      */
-    function __construct($username, $password)
+    function __construct($username, $password, $deviceId = 'SimpliSafeApiProxy')
     {
-      $this->token = self::getToken($username, $password);
+      $this->token = self::getToken($username, $password, $deviceId);
       $this->user = $this->getUser();
       $this->subscription = $this->getSubscriptions()[0];
     }
@@ -78,10 +79,11 @@ class SimpliSafeApiProxy
      * @param string $username SimpliSafe account username
      * @param string $password SimpliSafe account password
      * @param string $deviceId Name that will be displayed in the 'Recenlty Used Mobile Devices' log
+     *               WebApp uses 'Webapp; useragent="<user-agent>"; uuid="<uuid>"
      *
      * @return object
      */
-    public static function getToken($username, $password, $deviceId = null)
+    public static function getToken($username, $password, $deviceId = 'SimpliSafeApiProxy')
     {
         $auth_user = self::getAuthorizationUser();
         $curlopts = array(
@@ -260,6 +262,16 @@ class SimpliSafeApiProxy
     }
 
     /**
+     * Gets the email preferences JSON object via the SimpliSafe API
+     *
+     * @return object
+     */
+    public function getEmailPreferences()
+    {
+        return $this->get(self::API_BASE_URL . '/users/' . $this->subscription->uid . '/emailPreferences');
+    }
+
+    /**
      * Gets the events JSON object via the SimpliSafe API
      *
      * @param int $numEvents Number of events to return
@@ -292,6 +304,16 @@ class SimpliSafeApiProxy
     }
 
     /**
+     * Gets the mobile devices JSON object via the SimpliSafe API
+     *
+     * @return object
+     */
+    public function getMobileDevices()
+    {
+        return $this->get(self::API_BASE_URL . '/users/' . $this->subscription->uid . '/mobileDevices');
+    }
+
+    /**
      * Gets the Nest integration info JSON object via the SimpliSafe API
      *
      * @return object
@@ -299,6 +321,30 @@ class SimpliSafeApiProxy
     public function getNestIntegration()
     {
         return $this->get(self::API_BASE_URL . '/integration/nest/' . $this->subscription->sid . '/info');
+    }
+
+    /**
+     * Gets the order history JSON object via the SimpliSafe API
+     *
+     * @param int $numOrders Number of orders to return
+     *
+     * @return object
+     */
+    public function getOrderHistory($numOrders)
+    {
+        return $this->get(self::API_BASE_URL . '/users/' . $this->subscription->uid . '/orderHistory?numOrders=' . $numOrders);
+    }
+
+    /**
+     * Gets the payment history JSON object via the SimpliSafe API
+     *
+     * @param int $numInvoices Number of invoices to return
+     *
+     * @return object
+     */
+    public function getPaymentHistory($numInvoices)
+    {
+        return $this->get(self::API_BASE_URL . '/users/' . $this->subscription->uid . '/paymentHistory?numInvoices=' . $numInvoices);
     }
 
     /**
