@@ -49,11 +49,14 @@ class SimpliSafeApiProxy
     }
 
     /**
-     * Look up HTTP authentication "user" for requesting token (derived from HTML comment in WebApp)
+     * Gets access token object via SimpliSafe API
      *
-     * @return string
+     * @param string $username SimpliSafe account username
+     * @param string $password SimpliSafe account password
+     *
+     * @return object
      */
-    public static function getAuthorizationUser()
+    public static function getToken($username, $password)
     {
         $curlopts = array(
             CURLOPT_URL => self::WEBAPP_URL,
@@ -69,20 +72,6 @@ class SimpliSafeApiProxy
         preg_match('/<!-- Version (.+) \| (.+) -->/', $response, $matches);
         $uuid = $matches[2];
         $auth_user = $uuid . '.' . str_replace('.', '-', $matches[1]) . '.WebApp.simplisafe.com';
-        return $auth_user;
-    }
-
-    /**
-     * Gets access token object via SimpliSafe API
-     *
-     * @param string $username SimpliSafe account username
-     * @param string $password SimpliSafe account password
-     *
-     * @return object
-     */
-    public static function getToken($username, $password)
-    {
-        $auth_user = self::getAuthorizationUser();
         $curlopts = array(
             CURLOPT_URL => self::API_BASE_URL . '/api/token',
             CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
