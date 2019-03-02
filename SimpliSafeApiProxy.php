@@ -228,6 +228,16 @@ class SimpliSafeApiProxy
     }
 
     /**
+     * Gets sensor JSON object via the SimpliSafeAPI
+     *
+     * @return object
+     */
+    public function getSensors()
+    {
+      return $this->get(self::API_BASE_URL . '/ss3/subscriptions/' . $this->subscription->sid . '/sensors?forceUpdate=true');
+    }
+
+    /**
      * Gets the UUID of a camera from the cameras stored subscription
      *
      * @parm int $index Zero-based index
