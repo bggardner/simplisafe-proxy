@@ -45,18 +45,15 @@ class SimpliSafeApiProxy
     {
       $this->token = self::getToken($username, $password);
       $this->user = $this->getUser();
-      $this->subscription = $this->getSubscription();
+      $this->subscription = $this->getSubscriptions()[0];
     }
 
     /**
-     * Gets access token object via SimpliSafe API
+     * Look up HTTP authentication "user" for requesting token (derived from HTML comment in WebApp)
      *
-     * @param string $username SimpliSafe account username
-     * @param string $password SimpliSafe account password
-     *
-     * @return object
+     * @return string
      */
-    public static function getToken($username, $password)
+    public static function getAuthorizationUser()
     {
         $curlopts = array(
             CURLOPT_URL => self::WEBAPP_URL,
@@ -72,6 +69,21 @@ class SimpliSafeApiProxy
         preg_match('/<!-- Version (.+) \| (.+) -->/', $response, $matches);
         $uuid = $matches[2];
         $auth_user = $uuid . '.' . str_replace('.', '-', $matches[1]) . '.WebApp.simplisafe.com';
+        return $auth_user;
+    }
+
+    /**
+     * Gets access token object via SimpliSafe API
+     *
+     * @param string $username SimpliSafe account username
+     * @param string $password SimpliSafe account password
+     * @param string $deviceId Name that will be displayed in the 'Recenlty Used Mobile Devices' log
+     *
+     * @return object
+     */
+    public static function getToken($username, $password, $deviceId = null)
+    {
+        $auth_user = self::getAuthorizationUser();
         $curlopts = array(
             CURLOPT_URL => self::API_BASE_URL . '/api/token',
             CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
@@ -83,7 +95,7 @@ class SimpliSafeApiProxy
                 'grant_type' => 'password',
                 'username' => $username,
                 'password' => $password,
-                'device_id' => 'WebApp; useragent="' . $_SERVER['HTTP_USER_AGENT'] . '"; uuid="' . $uuid . '"'
+                'device_id' => $deviceId
             )),
         );
         $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
@@ -168,27 +180,6 @@ class SimpliSafeApiProxy
     }
 
     /**
-     * Gets user JSON object via SimpliSafe API
-     *
-     * @return object
-     */
-    public function getUser()
-    {
-        return $this->get(self::API_BASE_URL . '/api/authCheck');
-    }
-
-    /**
-     * Gets subscription JSON object via SimpliSafe API
-     *
-     * @return object
-     */
-    public function getSubscription()
-    {
-        return $this->get(self::API_BASE_URL . '/users/' . $this->user->userId . '/subscriptions?activeOnly=false')->subscriptions[0];
-    }
-
-
-    /**
      * Gets alarm state JSON object via the SimipliSafe API
      *
      * @return object
@@ -228,13 +219,33 @@ class SimpliSafeApiProxy
     }
 
     /**
-     * Gets sensor JSON object via the SimpliSafeAPI
+     * Gets the alerted users JSON object via the SimpliSafe API
      *
      * @return object
      */
-    public function getSensors()
+    public function getAlertedUsers()
     {
-      return $this->get(self::API_BASE_URL . '/ss3/subscriptions/' . $this->subscription->sid . '/sensors?forceUpdate=true');
+        return $this->get(self::API_BASE_URL . '/subscriptions//' . $this->subscription->sid . '/alertsUsers')->alertsUsers;
+    }
+
+    /**
+     * Gets the Alexa integration tokens JSON object via the SimpliSafe API
+     *
+     * @return object
+     */
+    public function getAlexaIntegrationTokens()
+    {
+        return $this->get(self::API_BASE_URL . '/integration/alexa/' . $this->subscription->sid . '/tokens');
+    }
+
+    /**
+     * Gets the August integration info JSON object via the SimpliSafe API
+     *
+     * @return object
+     */
+    public function getAugustIntegrationInfo()
+    {
+        return $this->get(self::API_BASE_URL . '/integration/alexa/' . $this->subscription->sid . '/info');
     }
 
     /**
@@ -246,6 +257,117 @@ class SimpliSafeApiProxy
      */
     public function getCameraUuid($index) {
         return $this->subscription->location->system->cameras[$index]->uuid;
+    }
+
+    /**
+     * Gets the events JSON object via the SimpliSafe API
+     *
+     * @param int $numEvents Number of events to return
+     *
+     * @return object
+     */
+    public function getEvents($numEvents)
+    {
+        return $this->get(self::API_BASE_URL . '/subscriptions/' . $this->subscription->sid . '/events?numEvents=' . $numEvents);
+    }
+
+    /**
+     * Gets the Google integration tokens JSON object via the SimpliSafe API
+     *
+     * @return object
+     */
+    public function getGoogleIntegrationTokens()
+    {
+        return $this->get(self::API_BASE_URL . '/integration/google/' . $this->subscription->sid . '/tokens');
+    }
+
+    /**
+     * Gets login into JSON object via the SimpliSafeAPI
+     *
+     * @return object
+     */
+    public function getLoginInfo()
+    {
+        return $this->get(self::API_BASE_URL . '/users/' . $this->subscription->uid);
+    }
+
+    /**
+     * Gets the Nest integration info JSON object via the SimpliSafe API
+     *
+     * @return object
+     */
+    public function getNestIntegration()
+    {
+        return $this->get(self::API_BASE_URL . '/integration/nest/' . $this->subscription->sid . '/info');
+    }
+
+    /**
+     * Gets the PINs JSON object via the SimpliSafe API
+     *
+     * @return object
+     */
+    public function getPins()
+    {
+        return $this->get(self::API_BASE_URL . '/ss3/subscriptions/' . $this->subscription->sid . '/settings/pins?forceUpdate=true');
+    }
+
+    /**
+     * Gets sensor JSON object via the SimpliSafeAPI
+     *
+     * @return object
+     */
+    public function getSensors()
+    {
+        return $this->get(self::API_BASE_URL . '/ss3/subscriptions/' . $this->subscription->sid . '/sensors?forceUpdate=true');
+    }
+
+    /**
+     * Gets the base station settings JSON object via the SimpliSafeAPI
+     * @return object
+     */
+    public function getSettings()
+    {
+        return $this->get(self::API_BASE_URL . '/ss3/subscriptions/' . $this->subscription->sid . '/settings/normal?forceUpdate=true');
+    }
+
+    /**
+     * Gets subscription JSON object via SimpliSafe API
+     *
+     * @return object
+     */
+    public function getSubscription()
+    {
+        return $this->get(self::API_BASE_URL . '/subscriptions/' . $this->subscription->sid)->subscriptions;
+    }
+
+    /**
+     * Gets subscriptions JSON object via SimpliSafe API
+     *
+     * @return object
+     */
+    public function getSubscriptions()
+    {
+        return $this->get(self::API_BASE_URL . '/users/' . $this->user->userId . '/subscriptions?activeOnly=false')->subscriptions;
+    }
+
+    /**
+     * Gets user JSON object via SimpliSafe API
+     *
+     * @return object
+     */
+    public function getUser()
+    {
+        return $this->get(self::API_BASE_URL . '/api/authCheck');
+    }
+
+    /**
+     * Gets addresses JSON object for a given user via SimpliSafe API
+     *
+     * @return object
+     */
+    public function getUserAddresses()
+    {
+        return $this->get(self::API_BASE_URL . '/users/' . $this->subscription->uid . '/addresses');
     }
 
     /**
