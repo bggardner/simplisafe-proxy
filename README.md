@@ -26,6 +26,9 @@ $alarmState = $proxy->getAlarmState();
 $alarmState = $proxy->setAlamrmState(SimpliSafeApiProxy::STATE_AWAY); // or, just 'away'
 // Example result: {"state":"AWAY_COUNT","stateUpdated":1551532144,"exitDelay":60}
 
+// Get the sesor data (names, states, etc.)
+$sensors = $proxy->getSensors();
+
 // Ouput a Flash Video camera stream with width of 1024px
 $proxy->streamCamera($proxy->getCameraUuid(0), 'flv', 1024);
 // This could also be manipulated to store the stream locally
@@ -35,3 +38,4 @@ $proxy->streamCamera($proxy->getCameraUuid(0), 'flv', 1024);
 A big thanks to the projects below which I used as a guide for developing the code:
 * [ssclient](https://github.com/jrassier/ssclient)
 * [simplisafe-ss3](https://github.com/rottmanj/simplisafe-ss3)
+* [simplisafe-ss3-nodejs](https://github.com/chowielin/simplisafe-ss3-nodejs)
