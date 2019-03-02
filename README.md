@@ -2,7 +2,7 @@
 
 A simple PHP class that takes care of authenticating with the SimpliSafe API, allowing simplified access from browsers.  It also includes some common methods so it can used programmatically as a client instead of a proxy.
 
-This project was developed to use with a home automation system, and is meant to be used on a secure local network only.  As your SimpliSafe account credentials are required, be aware of possible security risks.
+NOTICE: This project was developed to use with a home automation system, and is meant to be used on a secure local network only.  As your SimpliSafe account credentials are required, be aware of possible security risks.
 
 # Dependencies
 * SimpliSafe monitoring account (required for API access)
@@ -35,6 +35,8 @@ $proxy->streamCamera($proxy->getCameraUuid(0), 'flv', 1024);
 ```
 
 # See also
+For sensor type numbers, see [simplisafe-rf](https://github.com/bggardner/simplisafe-rf/blob/master/simplisafe/__init__.py).
+
 A big thanks to the projects below which I used as a guide for developing the code:
 * [ssclient](https://github.com/jrassier/ssclient)
 * [simplisafe-ss3](https://github.com/rottmanj/simplisafe-ss3)
