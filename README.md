@@ -5,7 +5,7 @@ A simple PHP class that takes care of authenticating with the SimpliSafe API, al
 NOTICE: This project was developed to use with a home automation system, and is meant to be used on a secure local network only.  As your SimpliSafe account credentials are required, be aware of possible security risks.
 
 # Dependencies
-* SimpliSafe monitoring account (required for API access)
+* SimpliSafe interactive monitoring account (required for API access)
 * PHP 7
 
 # Usage
@@ -80,6 +80,7 @@ flvPlayer.load();
 For sensor type numbers, see [simplisafe-rf](https://github.com/bggardner/simplisafe-rf/blob/master/simplisafe/__init__.py).
 
 A big thanks to the projects below which I used as a guide for developing the code:
-* [ssclient](https://github.com/jrassier/ssclient)
-* [simplisafe-ss3](https://github.com/rottmanj/simplisafe-ss3)
-* [simplisafe-ss3-nodejs](https://github.com/chowielin/simplisafe-ss3-nodejs)
+* [jrassier/ssclient](https://github.com/jrassier/ssclient)
+* [rottmanj/simplisafe-ss3](https://github.com/rottmanj/simplisafe-ss3)
+* [chowielin/simplisafe-ss3-nodejs](https://github.com/chowielin/simplisafe-ss3-nodejs)
+* [bachya/simplisafe-python](https://github.com/bachya/simplisafe-python)
