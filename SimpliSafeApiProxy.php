@@ -419,7 +419,7 @@ class SimpliSafeApiProxy
     /**
      * Streams the camera video to the output
      *
-     * @param string $uuid UUID of the camera
+     * @param string|int $uuid UUID of the camera (string) or zero-based index (int or numeric string)
      * @param string $format Video stream format, one of: 'flv' (Flash Video) or 'mjpg' (Motion JPEG)
      * @param string $width Width in pixels of the returned stream (clientWidth property of video element, e.g.)
      * @param string $mimeType Desired MIME type for use in the 'Content-type' header. Suggested values:
@@ -428,6 +428,9 @@ class SimpliSafeApiProxy
      *                             'video/x-motion-jpeg' for $format = 'mjpg' (Motion JPEG)
      */
     public function streamCamera($uuid, $format, $width, $mimeType = 'application/octet-stream') {
+        if (is_numeric($uuid)) {
+            $uuid = $this->getCameraUuid($uuid);
+        }
         header('Content-type: ' . $mimeType);
         $ch = curl_init();
         curl_setopt_array($ch, array(
