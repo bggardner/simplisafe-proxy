@@ -97,6 +97,7 @@ class SimpliSafeApiProxy
                 'grant_type' => 'password',
                 'username' => $username,
                 'password' => $password,
+                'client_id' => $auth_user,
                 'device_id' => $deviceId
             )),
         );
@@ -107,6 +108,57 @@ class SimpliSafeApiProxy
         $response = curl_exec($ch);
         curl_close($ch);
         $token = json_decode($response);
+        if (property_exists($token, 'mfa_token'))
+        {
+            $curlopts = array(
+                CURLOPT_URL => self::API_BASE_URL . '/api/mfa/challenge',
+                CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
+                CURLOPT_ENCODING => 'gzip',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => http_build_query(array(
+                    'challenge_type' => 'oob',
+                    'client_id' => $auth_user,
+                    'mfa_token' => $token->mfa_token
+                )),
+            );
+            $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
+            $curlopts[CURLOPT_HTTPHEADER][] = 'Content-Length: ' . strlen($curlopts[CURLOPT_POSTFIELDS]);
+            $ch = curl_init();
+            curl_setopt_array($ch, $curlopts);
+            $response = curl_exec($ch);
+            curl_close($ch);
+            $response = json_decode($response);
+            $curlopts = array(
+                CURLOPT_URL => self::API_BASE_URL . '/api/token',
+                CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
+                CURLOPT_ENCODING => 'gzip',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => http_build_query(array(
+                  'client_id' => $auth_user,
+                  'grant_type' => 'http://simplisafe.com/oauth/grant-type/mfa-oob',
+                  'mfa_token' => $token->mfa_token,
+                  'oob_code' => $response->oob_code,
+//                  'scope' => 'offline_access'
+                )),
+            );
+            $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
+            $curlopts[CURLOPT_HTTPHEADER][] = 'Content-Length: ' . strlen($curlopts[CURLOPT_POSTFIELDS]);
+            $ch = curl_init();
+            curl_setopt_array($ch, $curlopts);
+            $response = curl_exec($ch);
+            curl_close($ch);
+            $response = json_decode($response);
+            if (property_exists($response, 'error')) {
+              throw new Exception($response->error);
+            }
+            throw new Exception("Pending MFA verification.");
+        } else if (property_exists($token, 'error')) {
+          print_r($token);
+          exit();
+          throw new Exception($token->error);
+        }
         return $token;
     }
 
