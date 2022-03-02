@@ -4,20 +4,32 @@
  */
 class SimpliSafeApiProxy
 {
+    /** @var string VERSION Version of SimpliSafeApiProxy */
+    public const VERSION = '1.0.0';
+
     /** @var string API_BASE_URL Base URL of the SimpliSafe API */
     public const API_BASE_URL = 'https://api.simplisafe.com/v1';
+
+    /** @var array AUTH_PARAMS POST parameters used during Auth0 authentication */
+    public const AUTH_PARAMS = [
+        'domain' => 'auth.simplisafe.com',
+        'client_id' => '42aBZ5lYrVW12jfOuu3CQROitwxg9sN5',
+        'audience' => 'https://api.simplisafe.com/',
+        'scope' => 'offline_access openid https://api.simplisafe.com/scopes/user::platform',
+        'redirect_uri' => 'com.simplisafe.mobile://auth.simplisafe.com/ios/com.simplisafe.mobile/callback'
+    ];
 
     /** @var string MEDIA_BASE_URL Base URL of the SimpliSafe media server */
     public const MEDIA_BASE_URL = 'https://media.simplisafe.com/v1';
 
     /** @var array WEBAPP_HEADERS Headers used by SimpliSafe WebApp (probably only need 'Accept') */
-    public const WEBAPP_HEADERS = array(
+    public const WEBAPP_HEADERS = [
         'Origin: https://webapp.simplisafe.com',
         'Referer: https://webapp.simplisafe.com/',
         'Accept: application/json, text/plain, */*',
         'Accept-Encoding: gzip, deflate, br',
         'Accept-Language: en-US,en;q=0.5'
-    );
+    ];
 
     /** @var string WEBAPP_URL URL of the WebApp */
     public const WEBAPP_URL = 'https://webapp.simplisafe.com';
@@ -38,128 +50,178 @@ class SimpliSafeApiProxy
     protected $user;
 
     /**
-     * @param string $username SimpliSafe account username
-     * @param string $password SimpliSafe account password
-     * @param string $deviceId Name that will be displayed in the 'Recenlty Used Mobile Devices' log
+     * @param string $token_path File path of token storage location, including filename
+     * @param string $device Name that will be displayed in the 'Manage Logins' section
      */
-    function __construct($username, $password, $deviceId = 'SimpliSafeApiProxy')
+    function __construct($token_path, $device = __CLASS__)
     {
-      $this->token = self::getToken($username, $password, $deviceId);
-      $this->user = $this->getUser();
-      $this->subscription = $this->getSubscriptions()[0];
+        $this->token_path = $token_path;
+        $this->auth_params = array_merge(self::AUTH_PARAMS, [
+            'device' => $device
+        ]);
+        $this->user = $this->getUser();
+        sleep(1);
+        $this->subscription = $this->getSubscriptions()[0];
     }
 
     /**
-     * Look up HTTP authentication "user" for requesting token (derived from HTML comment in WebApp)
+     * Generates the authorize endpoint URL with query parameters
+     *
+     * @param string $code_verifier Auth0 code verifier
      *
      * @return string
      */
-    public static function getAuthorizationUser()
+    protected function getAuthorizeUrl($code_verifier)
     {
-        $curlopts = array(
-            CURLOPT_URL => self::WEBAPP_URL,
-            CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
-            CURLOPT_ENCODING => 'gzip',
-            CURLOPT_RETURNTRANSFER => true
+        $params = array_merge(
+            array_diff_key($this->auth_params, ['domain' => null]), [
+                'auth0Client' => base64_encode(json_encode((object) ['name' => __CLASS__, 'version' => static::VERSION])),
+                'response_type' => 'code',
+                'code_challenge' => preg_replace(['/\+/', '/\//', '/=/'], ['-', '_', ''], base64_encode(hash('sha256', $code_verifier, true))),
+                'code_challenge_method' => 'S256'
+            ]
         );
-        $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
-        $ch = curl_init();
-        curl_setopt_array($ch, $curlopts);
-        $response = curl_exec($ch);
-        curl_close($ch);
-        preg_match('/<!-- Version (.+) \| (.+) -->/', $response, $matches);
-        $uuid = $matches[2];
-        $auth_user = $uuid . '.' . str_replace('.', '-', $matches[1]) . '.WebApp.simplisafe.com';
-        return $auth_user;
+        return static::getAuthDomain() . '/authorize?' . http_build_query((object) $params);
     }
 
     /**
-     * Gets access token object via SimpliSafe API
+     * Generates the authorization domain including schema
      *
-     * @param string $username SimpliSafe account username
-     * @param string $password SimpliSafe account password
-     * @param string $deviceId Name that will be displayed in the 'Recenlty Used Mobile Devices' log
-     *               WebApp uses 'Webapp; useragent="<user-agent>"; uuid="<uuid>"
+     * @return string
+     */
+    protected static function getAuthDomain()
+    {
+        return 'https://' . static::AUTH_PARAMS['domain'];
+    }
+
+    /**
+     * Gets the access token object from file path or via SimpliSafe API
      *
      * @return object
      */
-    public static function getToken($username, $password, $deviceId = 'SimpliSafeApiProxy')
+    public function getToken()
     {
-        $auth_user = self::getAuthorizationUser();
-        $curlopts = array(
-            CURLOPT_URL => self::API_BASE_URL . '/api/token',
-            CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
-            CURLOPT_ENCODING => 'gzip',
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_USERPWD => $auth_user . ':',
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => http_build_query(array(
-                'grant_type' => 'password',
-                'username' => $username,
-                'password' => $password,
-                'client_id' => $auth_user,
-                'device_id' => $deviceId
-            )),
-        );
-        $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
-        $curlopts[CURLOPT_HTTPHEADER][] = 'Content-Length: ' . strlen($curlopts[CURLOPT_POSTFIELDS]);
-        $ch = curl_init();
-        curl_setopt_array($ch, $curlopts);
-        $response = curl_exec($ch);
-        curl_close($ch);
-        $token = json_decode($response);
-        if (property_exists($token, 'mfa_token'))
-        {
-            $curlopts = array(
-                CURLOPT_URL => self::API_BASE_URL . '/api/mfa/challenge',
-                CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
-                CURLOPT_ENCODING => 'gzip',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => http_build_query(array(
-                    'challenge_type' => 'oob',
-                    'client_id' => $auth_user,
-                    'mfa_token' => $token->mfa_token
-                )),
-            );
-            $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
-            $curlopts[CURLOPT_HTTPHEADER][] = 'Content-Length: ' . strlen($curlopts[CURLOPT_POSTFIELDS]);
+        // Process multi-factor authentication code and request new token
+        if ($_POST) {
+            $curlopts = [
+                CURLOPT_URL => self::getAuthDomain() . '/oauth/token',
+                CURLOPT_HTTPHEADER => [
+                    'Host: ' . $this->auth_params['domain'],
+                    'Content-Type: application/json; charset=utf-8',
+                    'User-Agent: ' . $_SERVER['HTTP_USER_AGENT']
+                ],
+                CURLOPT_POST => 1,
+                CURLOPT_POSTFIELDS => json_encode([
+                  'grant_type' => 'authorization_code',
+                  'client_id' => $this->auth_params['client_id'],
+                  'code_verifier' => $_POST['code_verifier'],
+                  'code' => $_POST['code'],
+                  'redirect_uri' => $this->auth_params['redirect_uri']
+                ]),
+                CURLOPT_RETURNTRANSFER => true
+            ];
             $ch = curl_init();
             curl_setopt_array($ch, $curlopts);
             $response = curl_exec($ch);
             curl_close($ch);
-            $response = json_decode($response);
-            $curlopts = array(
-                CURLOPT_URL => self::API_BASE_URL . '/api/token',
-                CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
-                CURLOPT_ENCODING => 'gzip',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => http_build_query(array(
-                  'client_id' => $auth_user,
-                  'grant_type' => 'http://simplisafe.com/oauth/grant-type/mfa-oob',
-                  'mfa_token' => $token->mfa_token,
-                  'oob_code' => $response->oob_code,
-//                  'scope' => 'offline_access'
-                )),
-            );
-            $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
-            $curlopts[CURLOPT_HTTPHEADER][] = 'Content-Length: ' . strlen($curlopts[CURLOPT_POSTFIELDS]);
-            $ch = curl_init();
-            curl_setopt_array($ch, $curlopts);
-            $response = curl_exec($ch);
-            curl_close($ch);
-            $response = json_decode($response);
-            if (property_exists($response, 'error')) {
-              throw new Exception($response->error);
-            }
-            throw new Exception("Pending MFA verification.");
-        } else if (property_exists($token, 'error')) {
-          print_r($token);
-          exit();
-          throw new Exception($token->error);
+            $this->saveToken($response);
         }
-        return $token;
+
+        $this->token = json_decode(file_get_contents($this->token_path));
+        if (isset($this->token->access_token)) { // Lazy validity test
+            $expires = (new DateTime(
+                $this->token->last_refreshed->date,
+                new DateTimeZone($this->token->last_refreshed->timezone)
+            ))->add(new DateInterval('PT' . $this->token->expires_in . 'S'));
+            if ($expires <= new DateTime()) {
+                // Expired token, request refresh
+                $curlopts = [
+                    CURLOPT_URL => self::getAuthDomain() . '/oauth/token',
+                    CURLOPT_HTTPHEADER => [
+                        'Host: ' . $this->auth_params['domain'],
+                        'Content-Type: application/json; charset=utf-8'
+                    ],
+                    CURLOPT_POST => 1,
+                    CURLOPT_POSTFIELDS => json_encode([
+                        'grant_type' => 'refresh_token',
+                        'client_id' => $this->auth_params['client_id'],
+                        'refresh_token' => $this->token->refresh_token
+                    ]),
+                    CURLOPT_RETURNTRANSFER => true
+                ];
+                $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
+                $ch = curl_init();
+                curl_setopt_array($ch, $curlopts);
+                $response = curl_exec($ch);
+                curl_close($ch);
+                $this->saveToken($response);
+            }
+            return $this->token;
+        }
+
+        // No valid token, perform MFA
+        $code_verifier = self::createRandomString();
+?>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title><?= __CLASS__ ?></title>
+</head>
+<body>
+Invalid token. Please follow these steps:
+<ol>
+  <li><a href="https://webapp.simplisafe.com/new/#/logout" target="_blank">Logout</a> of any existing SimpliSafe WebApp session and close the tab</li>
+  <li>Click <a href="<?= $this->getAuthorizeUrl($code_verifier) ?>" target="_blank">here</a> to open a new tab (tab #1) and login with your SimpliSafe credentials</li>
+  <li><strong>IMPORTANT:</strong> In tab #1, open the browser's <em>Developer Console</em> (F12) and switch to the <em>Network</em> tab</li>
+  <li>Wait for an email from SimpliSafe and click on the <em>Verify Device</em> button/link, which will open a new tab (tab #2)</li>
+  <li>Close browser tab #2 and return to tab #1</li>
+  <li>In the <em>Network</em> tab of the <em>Developer Console</em>, look for an error regarding <em>auth.simplisafe.com/ios/com.simplisafe.mobile/callback?code=XXX</em></li>
+  <li>Copy the code appearing after <em>?code=</em>, paste into the form below, and click <em>Submit</em></li>
+  <li>The new device will appear in your account as <em>SimpliSafe iOS: <?= preg_replace('/[;=]/', $this->auth_params['device']) ?></em</li>
+</ol>
+<form method="post">
+<input type="hidden" name="code_verifier" value="<?= $code_verifier ?>"><br>
+<label for="code">Code:</label> <input for="code" name="code">
+<button type="submit">Submit</button>
+</form>
+</body>
+</html>
+<?php
+        exit;
+    }
+
+    /**
+      * Creates a random 43-character string from a limited character set
+      *
+      * @return string
+      */
+    protected static function createRandomString() : string
+    {
+        $charset = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_~.';
+        $max = strlen($charset) - 1;
+        $random = '';
+        for ($i = 0; $i < 43; $i++) {
+            $random .= substr($charset, rand(0, $max), 1);
+        }
+        return $random;
+    }
+
+    /**
+      * Parses and saves the latest token information
+      *
+      * @param string $response Response from an authorization request
+      *
+      */
+    protected function saveToken($response)
+    {
+        $token = json_decode($response);
+        if (isset($token->error)) {
+            throw new Exception($token->error . ': ' . $token->error_description);
+        }
+        $token->last_refreshed = new DateTime('now', new DateTimeZone('UTC'));
+        file_put_contents($this->token_path, json_encode($token));
+        $this->token = $token;
     }
 
     /**
@@ -171,14 +233,15 @@ class SimpliSafeApiProxy
       */
     public function get($url)
     {
+        $token = $this->getToken();
         $curlopts = array(
             CURLOPT_URL => $url,
             CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
-            CURLOPT_ENCODING => 'gzip',
             CURLOPT_RETURNTRANSFER => true
         );
+        $curlopts[CURLOPT_HTTPHEADER][] = 'Host: api.simplisafe.com';
         $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
-        $curlopts[CURLOPT_HTTPHEADER][] = 'Authorization: ' . $this->token->token_type . ' ' . $this->token->access_token;
+        $curlopts[CURLOPT_HTTPHEADER][] = 'Authorization: ' . $token->token_type . ' ' . $token->access_token;
         $ch = curl_init();
         curl_setopt_array($ch, $curlopts);
         $response = curl_exec($ch);
@@ -195,6 +258,7 @@ class SimpliSafeApiProxy
       */
     public function post($url, $data = [])
     {
+        $token = $this->getToken();
         $curlopts = array(
             CURLOPT_URL => $url,
             CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
@@ -205,32 +269,12 @@ class SimpliSafeApiProxy
         );
         $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
         $curlopts[CURLOPT_HTTPHEADER][] = 'Content-Length: ' . strlen($curlopts[CURLOPT_POSTFIELDS]);
-        $curlopts[CURLOPT_HTTPHEADER][] = 'Authorization: ' . $this->token->token_type . ' ' . $this->token->access_token;
+        $curlopts[CURLOPT_HTTPHEADER][] = 'Authorization: ' . $token->token_type . ' ' . $token->access_token;
         $ch = curl_init();
         curl_setopt_array($ch, $curlopts);
         $response = curl_exec($ch);
         curl_close($ch);
         return json_decode($response);
-    }
-
-    /**
-     * Invalidates an access token via the SimpliSafe API and destroys the object
-     */
-    public function invalidateToken()
-    {
-        $curlopts = array(
-            CURLOPT_URL => self::API_BASE_URL . '/api/token',
-            CURLOPT_HTTPHEADER => SELF::WEBAPP_HEADERS,
-            CURLOPT_ENCODING => 'gzip',
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CUSTOMREQUEST => 'DELETE'
-        );
-        $curlopts[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $_SERVER['HTTP_USER_AGENT'];
-        $curlopts[CURLOPT_HTTPHEADER][] = 'Authorization: ' . $this->token->token_type . ' ' . $this->token->access_token;
-        $ch = curl_init();
-        curl_setopt_array($ch, $user_curlopts);
-        $response = curl_exec($ch);
-        curl_close($ch);
     }
 
     /**
@@ -240,12 +284,13 @@ class SimpliSafeApiProxy
      */
     public function getAlarmState()
     {
-        switch ($this->subscription->location->system->version) {
+        $version = $this->subscription->location->system->version;
+        switch ($version) {
             case 3:
                 $url = self::API_BASE_URL . '/ss3/subscriptions/' . $this->subscription->sid . '/state';
                 break;
             default:
-                throw new Exception("Not implemented");
+                throw new Exception('getAlarmState() for version ' . $version . ' not implemented');
         }
         return $this->get($url);
     }
@@ -445,7 +490,10 @@ class SimpliSafeApiProxy
      */
     public function getSubscriptions()
     {
-        return $this->get(self::API_BASE_URL . '/users/' . $this->user->userId . '/subscriptions?activeOnly=false')->subscriptions;
+        if (!isset($this->user->userId)) {
+            throw new Exception('User ID not set!');
+        }
+        return $this->get(self::API_BASE_URL . '/users/' . $this->user->userId . '/subscriptions?activeOnly=true')->subscriptions;
     }
 
     /**

@@ -10,9 +10,9 @@ NOTICE: This project was developed to use with a home automation system, and is 
 
 # Usage
 ```php
-require_once('SimpliSafeApiProxy.php');
+require_once 'SimpliSafeApiProxy.php';
 
-$proxy = new SimpliSafeApiProxy($username, $password);
+$proxy = new SimpliSafeApiProxy('/path/to/safe/place/for/simplisafe.token', 'My Device');
 
 // Use as a proxy
 header('Content-type: application/json');
@@ -80,7 +80,8 @@ flvPlayer.load();
 For sensor type numbers, see [simplisafe-rf](https://github.com/bggardner/simplisafe-rf/blob/master/simplisafe/__init__.py).
 
 A big thanks to the projects below which I used as a guide for developing the code:
+* [bachya/simplisafe-python](https://github.com/bachya/simplisafe-python)
+* [auth0/auth0-spa-js](https://github.com/auth0/auth0-spa-js)
 * [jrassier/ssclient](https://github.com/jrassier/ssclient)
 * [rottmanj/simplisafe-ss3](https://github.com/rottmanj/simplisafe-ss3)
 * [chowielin/simplisafe-ss3-nodejs](https://github.com/chowielin/simplisafe-ss3-nodejs)
-* [bachya/simplisafe-python](https://github.com/bachya/simplisafe-python)
